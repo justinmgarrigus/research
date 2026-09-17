@@ -306,7 +306,7 @@ wheels = [
 [[package]]
 name = "util"
 version = "0.1.0"
-source = { git = "https://github.com/justinmgarrigus/util.git?rev=main#92d7231bce7ccc1f2bd8114e0b1a0f9bea6847a0" }
+source = { git = "https://github.com/justinmgarrigus/util.git?rev=main#386355929602cc6d2b8e5764c975f8ea9e870063" }
 dependencies = [
     { name = "gitpython" },
     { name = "pytest" },
