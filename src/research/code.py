@@ -29,8 +29,9 @@ def list_files(root: str, sources: list[str]) -> list[str]:
 
     Paths are relative to "root" and sorted. Untracked files are included, so
     a new module counts before it is "git add"ed, while ignored files (logs,
-    virtual environments) never count. Raises FileNotFoundError if a source
-    matches nothing.
+    virtual environments) never count. Raises ValueError if a source matches
+    nothing, since that is a mistake in the declared sources rather than
+    something that can be answered.
     """
     repo = Repo(root)
     files: set[str] = set()
@@ -40,9 +41,7 @@ def list_files(root: str, sources: list[str]) -> list[str]:
         )
         matched = [f for f in out.split("\0") if f]
         if len(matched) == 0:
-            raise FileNotFoundError(
-                f"Source '{source}' matches no files in '{root}'"
-            )
+            raise ValueError(f"Source '{source}' matches no files in '{root}'")
         files.update(matched)
     return sorted(files)
 

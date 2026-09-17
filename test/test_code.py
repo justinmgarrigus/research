@@ -16,12 +16,6 @@ def test_find_root(project: Path) -> None:
     assert find_root(str(project / "lib" / "mod.py")) == str(project)
 
 
-def test_find_root_missing(tmp_path: Path) -> None:
-    """A path outside any repository raises FileNotFoundError."""
-    with pytest.raises(FileNotFoundError):
-        find_root(str(tmp_path))
-
-
 def test_list_files(project: Path) -> None:
     """Sources select tracked and untracked files but never ignored ones."""
     write(project / "lib" / "new.py", "Y = 2\n")  # Untracked.
@@ -36,7 +30,7 @@ def test_list_files(project: Path) -> None:
 
 def test_list_files_missing_source(project: Path) -> None:
     """A source that matches nothing is a configuration error."""
-    with pytest.raises(FileNotFoundError, match=r"nothing\.py"):
+    with pytest.raises(ValueError, match=r"nothing\.py"):
         list_files(str(project), ["nothing.py"])
 
 

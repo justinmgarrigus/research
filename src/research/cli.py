@@ -49,10 +49,16 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def split_target(target: str) -> tuple[str, str | None]:
-    """Splits "<experiment>[/<artifact>]" into its parts."""
-    experiment, _, artifact = target.partition("/")
-    return experiment, (artifact or None)
+def load_target(target: str, root: str) -> tuple[Experiment, Artifact | None]:
+    """Loads "<experiment>[/<artifact>]", raising if either does not exist."""
+    ident, _, art_ident = target.partition("/")
+    exp = Experiment.load(ident, root=root)
+    if not art_ident:
+        return exp, None
+    art = exp.get(art_ident)
+    if art is None:
+        raise FileNotFoundError(f"No artifact '{target}'")
+    return exp, art
 
 
 def state(art: Artifact) -> str:
@@ -84,13 +90,8 @@ def cmd_ls(target: str | None, root: str) -> str:
             rows.append([exp.ident, str(len(arts)), str(stale), exp.name])
         return table(rows)
 
-    ident, art_ident = split_target(target)
-    exp = Experiment.load(ident, root=root)
-    arts = exp.artifacts
-    if art_ident is not None:
-        arts = [a for a in arts if a.ident == art_ident]
-        if len(arts) == 0:
-            raise FileNotFoundError(f"No artifact '{target}'")
+    exp, art = load_target(target, root)
+    arts = exp.artifacts if art is None else [art]
     rows = [["ARTIFACT", "TIMESTAMP", "COMMIT", "STATE"]]
     for art in arts:
         commit = "" if art.code is None else art.code.short_commit
@@ -102,16 +103,13 @@ def cmd_ls(target: str | None, root: str) -> str:
 
 def cmd_rm(target: str, root: str, force: bool) -> str:
     """Deletes an experiment or a single artifact."""
-    ident, art_ident = split_target(target)
-    exp = Experiment.load(ident, root=root)
-    if art_ident is None:
-        what = f"experiment '{ident}' ({len(exp.artifacts)} artifacts)"
+    exp, art = load_target(target, root)
+    if art is None:
+        what = f"experiment '{exp.ident}' ({len(exp.artifacts)} artifacts)"
         victim = exp
     else:
-        victim = exp.get(art_ident)
-        if victim is None:
-            raise FileNotFoundError(f"No artifact '{target}'")
         what = f"artifact '{target}'"
+        victim = art
     if not force:
         answer = input(f"Delete {what}? [y/N] ").strip().lower()
         if answer not in ("y", "yes"):
@@ -122,15 +120,8 @@ def cmd_rm(target: str, root: str, force: bool) -> str:
 
 def cmd_accept(target: str, root: str) -> str:
     """Marks artifacts as valid for the current code."""
-    ident, art_ident = split_target(target)
-    exp = Experiment.load(ident, root=root)
-    if art_ident is None:
-        arts = exp.artifacts
-    else:
-        art = exp.get(art_ident)
-        if art is None:
-            raise FileNotFoundError(f"No artifact '{target}'")
-        arts = [art]
+    exp, art = load_target(target, root)
+    arts = exp.artifacts if art is None else [art]
     for art in arts:
         art.accept()
     return f"Accepted {len(arts)} artifact(s) at {exp.code.short_commit}"

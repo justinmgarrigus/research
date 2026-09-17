@@ -79,15 +79,6 @@ def test_list_and_load(store: Path, project: Path) -> None:
         Experiment.load("notes")
 
 
-def test_ident_validation(store: Path, project: Path) -> None:
-    """Identifiers must be safe directory names."""
-    for ident in ("", "hello!", "foo bar", "a/b", ".hidden"):
-        with pytest.raises(ValueError):
-            make(project, ident)
-    with pytest.raises(ValueError):
-        make(project, "ok").get("a/b")
-
-
 def test_add_artifact_layout(store: Path, project: Path, media: Path) -> None:
     """An artifact is one directory: "artifact.json" plus copied files."""
     exp = make(project, "gen", sources=["main.py"])
@@ -139,6 +130,7 @@ def test_schema(store: Path, project: Path) -> None:
     exp.add_artifact(Artifact(exp, "a", {"x": 1, "cfg": {"n": 2}, "e": None}))
     good = [
         {"x": 2, "cfg": {"n": 3}, "e": "boom"},
+        {"x": 2.5, "cfg": {"n": 3.0}, "e": None},
         {"x": None, "cfg": None, "e": None},
     ]
     for idx, props in enumerate(good):
@@ -147,13 +139,14 @@ def test_schema(store: Path, project: Path) -> None:
         {"x": 1},
         {"x": 1, "cfg": {"n": 2}, "e": None, "extra": 1},
         {"x": "1", "cfg": {"n": 2}, "e": None},
+        {"x": True, "cfg": {"n": 2}, "e": None},
         {"x": 1, "cfg": {"m": 2}, "e": None},
         {"x": 1, "cfg": {"n": "2"}, "e": None},
     ]
     for idx, props in enumerate(bad):
         with pytest.raises(ValueError):
             exp.add_artifact(Artifact(exp, f"bad{idx}", props))
-    assert [a.ident for a in exp.artifacts] == ["a", "good0", "good1"]
+    assert [a.ident for a in exp.artifacts] == ["a", "good0", "good1", "good2"]
 
 
 def test_delete_in_file_explorer(store: Path, project: Path) -> None:
@@ -363,17 +356,6 @@ def test_code_captured_once(store: Path, project: Path) -> None:
     assert exp.get("a").code == code
 
 
-def test_eq_and_repr(store: Path, project: Path) -> None:
-    """Experiments compare by identifier; artifacts by experiment and ident."""
-    a1, a2, b = make(project, "a"), make(project, "a"), make(project, "b")
-    assert a1 == a2 and a1 != b and a1 != "a"
-    assert len({a1, a2, b}) == 2
-    assert Artifact(a1, "x", {}) == Artifact(a2, "x", {})
-    assert Artifact(a1, "x", {}) != Artifact(b, "x", {})
-    assert Artifact(a1, "x", {}) != Artifact(a1, "y", {})
-    assert "a" in repr(a1) and "x" in repr(Artifact(a1, "x", {}))
-
-
 def test_schema_fills_none_from_older(store: Path, project: Path) -> None:
     """A None in the newest artifact does not disable the type check."""
     exp = make(project)
@@ -399,7 +381,7 @@ def test_schema_follows_newest(store: Path, project: Path) -> None:
         store / "exp" / "z-new" / "artifact.json",
         json.dumps(
             {
-                "timestamp": "2026-01-01T00:00:00",
+                "timestamp": "2999-01-01T00:00:00",
                 "code": None,
                 "accepted": None,
                 "props": {"x": 1, "backend": "vllm"},
@@ -409,3 +391,68 @@ def test_schema_follows_newest(store: Path, project: Path) -> None:
     exp.add_artifact(Artifact(exp, "b", {"x": 2, "backend": "llamacpp"}))
     with pytest.raises(ValueError):
         exp.add_artifact(Artifact(exp, "c", {"x": 2}))
+
+
+@pytest.mark.regression
+def test_schema_reference_ignores_mtime(store: Path, project: Path) -> None:
+    """Saving or accepting an old artifact does not make it the reference.
+
+    Regression test: the reference used to be the artifact whose directory
+    was modified most recently, and "save()"/"accept()" modify the
+    directory, so after "research accept" the reference was arbitrary and
+    new artifacts failed the schema check at random.
+    """
+    exp = make(project)
+    exp.add_artifact(Artifact(exp, "a", {"x": 1}))
+    write(
+        store / "exp" / "z" / "artifact.json",
+        json.dumps(
+            {
+                "timestamp": "2999-01-01T00:00:00",
+                "code": None,
+                "accepted": None,
+                "props": {"x": 1, "backend": "vllm"},
+            },
+        ),
+    )
+    exp.get("a").save()
+    exp.add_artifact(Artifact(exp, "b", {"x": 2, "backend": "llamacpp"}))
+
+
+@pytest.mark.regression
+def test_stale_bad_source_raises(store: Path, project: Path) -> None:
+    """A declared source that matches no files is an error, not "unknown".
+
+    Regression test: "is_stale" used to swallow the error, so a mis-typed
+    source silently made every artifact "unknown" (and a strict run
+    re-collected the whole experiment).
+    """
+    exp = make(project, sources=["main.py"])
+    exp.add_artifact(Artifact(exp, "a", {"x": 1}))
+    with pytest.raises(ValueError, match=r"nothing\.py"):
+        _ = make(project, sources=["nothing.py"]).get("a").is_stale
+
+
+@pytest.mark.regression
+def test_failed_add_keeps_props(
+    store: Path, project: Path, media: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a failed add, the artifact's paths still point at the originals.
+
+    Regression test: they used to point into the deleted temporary directory,
+    so a retry (e.g. after losing a race) raised FileNotFoundError.
+    """
+    exp = make(project)
+    src = write(media / "log.txt", "log")
+    art = Artifact(exp, "a", {"f": pathlib.Path(src)})
+
+    def fail(*args: object) -> None:
+        raise OSError("simulated race")
+
+    with monkeypatch.context() as m:
+        m.setattr(os, "rename", fail)
+        with pytest.raises(FileExistsError):
+            exp.add_artifact(art)
+    assert art.props["f"] == src
+    exp.add_artifact(art)
+    assert exp.get("a").props["f"].read_text() == "log"

@@ -51,7 +51,7 @@ def check_props(props: Any, where: str = "props") -> None:  # noqa: ANN401
                     f"{where}: key '{key}' may not start with '$' (reserved)"
                 )
             check_props(value, f"{where}.{key}")
-    elif isinstance(props, (list, tuple)):
+    elif isinstance(props, list):
         for idx, value in enumerate(props):
             check_props(value, f"{where}[{idx}]")
     elif isinstance(props, str):
@@ -86,7 +86,7 @@ def copy_files(props: Any, directory: str) -> Any:  # noqa: ANN401
     """
     if isinstance(props, dict):
         return {k: copy_files(v, directory) for k, v in props.items()}
-    if isinstance(props, (list, tuple)):
+    if isinstance(props, list):
         return [copy_files(v, directory) for v in props]
     if not isinstance(props, pathlib.Path):
         return props
@@ -112,7 +112,7 @@ def serialize(props: Any, directory: str) -> Any:  # noqa: ANN401
     """Turns "props" into JSON, writing paths relative to "directory"."""
     if isinstance(props, dict):
         return {k: serialize(v, directory) for k, v in props.items()}
-    if isinstance(props, (list, tuple)):
+    if isinstance(props, list):
         return [serialize(v, directory) for v in props]
     if isinstance(props, pathlib.Path):
         if not _is_inside(props, directory):

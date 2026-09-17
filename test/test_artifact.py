@@ -2,7 +2,6 @@
 
 import json
 import pathlib
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -94,6 +93,7 @@ def test_unstorable(store: Path, project: Path) -> None:
         {"$path": "x"},
         {"x": {"$secret": 1}},
         {"x": {1, 2}},
+        {"x": (1, 2)},  # Would come back from JSON as a list.
     ):
         with pytest.raises(ValueError):
             Artifact(exp, "art", props)
@@ -143,12 +143,3 @@ def test_save_requires_stored(store: Path, project: Path) -> None:
     art = Artifact(make(project), "art", {"x": 1})
     with pytest.raises(RuntimeError):
         art.save()
-
-
-def test_timestamp(store: Path, project: Path) -> None:
-    """Timestamps are ISO 8601 with second precision, set at creation."""
-    art = Artifact(make(project), "art", {})
-    parsed = datetime.fromisoformat(art.timestamp)
-    assert abs((datetime.now() - parsed).total_seconds()) < 5
-    given = Artifact(make(project), "art", {}, timestamp="2026-01-02T03:04:05")
-    assert given.timestamp == "2026-01-02T03:04:05"

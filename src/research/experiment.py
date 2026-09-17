@@ -22,13 +22,6 @@ directory is an experiment if and only if it contains this file.
 """
 FILENAME = "experiment.json"
 
-"""
-How many of the newest artifacts are consulted to build the schema reference
-(see "Experiment._reference_props"). Bounds the cost of adding an artifact to
-a large experiment.
-"""
-SCHEMA_LOOKBACK = 8
-
 
 def _caller_dir() -> str:
     """Returns the directory of the module that called our caller.
@@ -41,15 +34,23 @@ def _caller_dir() -> str:
     return os.path.dirname(os.path.abspath(file))
 
 
+def _kind(value: Any) -> type:  # noqa: ANN401
+    """Returns the type "value" is compared by: int and float are one kind."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float
+    return type(value)
+
+
 def _check_schema(new: Any, old: Any, where: str = "props") -> None:  # noqa: ANN401
     """Raises ValueError unless "new" has the same keys and types as "old".
 
     Dicts are compared recursively. A None on either side matches anything,
-    since a property may legitimately be missing for some trials.
+    since a property may legitimately be missing for some trials, and an int
+    matches a float (a whole-number timeout is still a timeout).
     """
     if new is None or old is None:
         return
-    if type(new) is not type(old):
+    if _kind(new) is not _kind(old):
         raise ValueError(
             f"{where}: expected a {type(old).__name__} like the existing "
             f"artifacts, got a {type(new).__name__}"
@@ -253,30 +254,18 @@ class Experiment:
     def _reference_props(self: Experiment, ident: str) -> dict[str, Any] | None:
         """Returns the properties new artifacts are checked against.
 
-        The most recently written artifact (by directory modification time,
-        which needs no parsing) defines the keys, so a schema that evolved
-        over time (e.g. after migrating an old store) is compared against
-        its latest form. Its None values say nothing about a type, so they
-        are filled in from the next newest artifacts, consulting at most
-        "SCHEMA_LOOKBACK" of them. Returns None if there is no other
-        artifact.
+        The most recently added artifact (by its own timestamp; directory
+        times change whenever an artifact is saved or accepted) defines the
+        keys, so a schema that evolved over time (e.g. after migrating an old
+        store) is compared against its latest form. Its None values say
+        nothing about a type, so they are filled in from the next newest
+        artifacts. Returns None if there is no other artifact.
         """
-        candidates = []
-        for name in os.listdir(self.path):
-            path = os.path.join(self.path, name)
-            file = os.path.join(path, artifact_module.FILENAME)
-            if (
-                name == ident
-                or name.startswith(".")
-                or not os.path.isfile(file)
-            ):
-                continue
-            candidates.append((os.path.getmtime(path), name))
-        candidates.sort(reverse=True)
-
+        arts = [art for art in self.artifacts if art.ident != ident]
+        arts.sort(key=lambda art: art.timestamp, reverse=True)
         reference = None
-        for _, name in candidates[:SCHEMA_LOOKBACK]:
-            props = Artifact.load(self, os.path.join(self.path, name)).props
+        for art in arts:
+            props = art.props
             reference = props if reference is None else _fill(reference, props)
             if not _has_none(reference):
                 break
@@ -310,7 +299,7 @@ class Experiment:
         FileExistsError). With "replace=True", an existing artifact with the
         same identifier is deleted first. Raises ValueError if the artifact's
         properties do not have the keys and value types of the most recently
-        written artifact.
+        added artifact.
         """
         if artifact.experiment is None:
             artifact.experiment = self
@@ -334,6 +323,9 @@ class Experiment:
 
         final = os.path.join(self.path, artifact.ident)
         tmp = tempfile.mkdtemp(prefix=f".{artifact.ident}.", dir=self.path)
+        # Writing repoints the properties' paths into "tmp"; a failed add
+        # gives the caller back the originals, so it can retry.
+        props = artifact.props
         try:
             artifact._write(tmp)
             if existing is not None:
@@ -347,6 +339,7 @@ class Experiment:
                 ) from e
         except BaseException:
             shutil.rmtree(tmp, ignore_errors=True)
+            artifact.props = props
             raise
 
         # The copied files now live in "final", not "tmp".

@@ -20,7 +20,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-util = { git = "https://git@github.com/justinmgarrigus/util.git", rev = "main" }
+util = { git = "https://git@github.com/justinmgarrigus/util.git", rev = "8334d92227336337eadb5742128bfe67f84b4374" }
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -32,6 +32,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["test"]
 timeout = 300
+markers = ["regression: previously-fixed bugs"]
 
 [tool.ruff]
 line-length = 80

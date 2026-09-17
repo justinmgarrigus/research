@@ -196,7 +196,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "gitpython", specifier = ">=3.1.50" },
-    { name = "util", git = "https://github.com/justinmgarrigus/util.git?rev=main" },
+    { name = "util", git = "https://github.com/justinmgarrigus/util.git?rev=8334d92227336337eadb5742128bfe67f84b4374" },
 ]
 
 [package.metadata.requires-dev]
@@ -306,7 +306,7 @@ wheels = [
 [[package]]
 name = "util"
 version = "0.1.0"
-source = { git = "https://github.com/justinmgarrigus/util.git?rev=main#386355929602cc6d2b8e5764c975f8ea9e870063" }
+source = { git = "https://github.com/justinmgarrigus/util.git?rev=8334d92227336337eadb5742128bfe67f84b4374#8334d92227336337eadb5742128bfe67f84b4374" }
 dependencies = [
     { name = "gitpython" },
     { name = "pytest" },
