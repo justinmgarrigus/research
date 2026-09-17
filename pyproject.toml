@@ -1,0 +1,60 @@
+[project]
+name = "research"
+version = "0.1.0"
+description = "Stores, versions, and queries research artifacts on the filesystem"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "gitpython>=3.1.50",
+    "util",
+]
+
+[project.scripts]
+research = "research.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-timeout>=2.4.0",
+    "ruff>=0.15.20",
+]
+
+[tool.uv.sources]
+util = { git = "https://git@github.com/justinmgarrigus/util.git", rev = "main" }
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+timeout = 300
+
+[tool.ruff]
+line-length = 80
+indent-width = 4
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # import sorting
+    "B",      # bugbear
+    "UP",     # modern Python syntax
+    "SIM",    # simplify code
+    "ANN",    # type annotations
+    "D",      # docstrings
+    "RET",    # return statement consistency
+    "RUF",    # Ruff-specific rules
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
