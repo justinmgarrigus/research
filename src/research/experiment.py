@@ -1,4 +1,4 @@
-"""A group of artifacts sharing one schema, stored as one directory."""
+"""A group of related artifacts, stored as one directory."""
 
 from __future__ import annotations
 
@@ -42,11 +42,14 @@ def _kind(value: Any) -> type:  # noqa: ANN401
 
 
 def _check_schema(new: Any, old: Any, where: str = "props") -> None:  # noqa: ANN401
-    """Raises ValueError unless "new" has the same keys and types as "old".
+    """Raises ValueError if a property of "new" changed type from "old".
 
-    Dicts are compared recursively. A None on either side matches anything,
-    since a property may legitimately be missing for some trials, and an int
-    matches a float (a whole-number timeout is still a timeout).
+    Dicts are compared recursively, but only on the keys both have: an
+    experiment's properties grow and shrink as it evolves (e.g. a new
+    setting gets recorded), so a key may be added or dropped freely. A None
+    on either side matches anything, since a property may legitimately be
+    missing for some trials, and an int matches a float (a whole-number
+    timeout is still a timeout).
     """
     if new is None or old is None:
         return
@@ -56,14 +59,7 @@ def _check_schema(new: Any, old: Any, where: str = "props") -> None:  # noqa: AN
             f"artifacts, got a {type(new).__name__}"
         )
     if isinstance(new, dict):
-        if set(new.keys()) != set(old.keys()):
-            missing = sorted(set(old.keys()) - set(new.keys()))
-            extra = sorted(set(new.keys()) - set(old.keys()))
-            raise ValueError(
-                f"{where}: keys differ from the existing artifacts "
-                f"(missing {missing}, unexpected {extra})"
-            )
-        for key in new:
+        for key in new.keys() & old.keys():
             _check_schema(new[key], old[key], f"{where}.{key}")
 
 
@@ -90,7 +86,7 @@ def _fill(reference: Any, other: Any) -> Any:  # noqa: ANN401
 
 
 class Experiment:
-    """A named group of artifacts that share the same queryable structure.
+    """A named group of artifacts from the same kind of trial.
 
     Stored as the directory "RESEARCH_PATH/<ident>/", which holds
     "experiment.json" and one sub-directory per artifact. The filesystem is
@@ -256,8 +252,8 @@ class Experiment:
 
         The most recently added artifact (by its own timestamp; directory
         times change whenever an artifact is saved or accepted) defines the
-        keys, so a schema that evolved over time (e.g. after migrating an old
-        store) is compared against its latest form. Its None values say
+        types, so a property whose type changed over time is compared against
+        its latest form. Its None values say
         nothing about a type, so they are filled in from the next newest
         artifacts. Returns None if there is no other artifact.
         """
@@ -297,9 +293,9 @@ class Experiment:
         into place, so concurrent processes never observe a half-written
         artifact and never store the same identifier twice (the loser gets
         FileExistsError). With "replace=True", an existing artifact with the
-        same identifier is deleted first. Raises ValueError if the artifact's
-        properties do not have the keys and value types of the most recently
-        added artifact.
+        same identifier is deleted first. Raises ValueError if a property the
+        most recently added artifact also has changed type; properties may be
+        added or dropped freely.
         """
         if artifact.experiment is None:
             artifact.experiment = self

@@ -143,7 +143,6 @@ def migrate(old: str, new: str, log: Callable[[str], None] = print) -> None:
 
     for ident, group in buckets.items():
         info = meta.get(ident, {})
-        schemas: dict[tuple[str, ...], int] = {}
         exp_dir = os.path.join(new, ident)
         os.makedirs(exp_dir, exist_ok=True)
         exp_file = os.path.join(exp_dir, EXPERIMENT_FILENAME)
@@ -215,14 +214,3 @@ def migrate(old: str, new: str, log: Callable[[str], None] = print) -> None:
                 with open(os.path.join(target, ARTIFACT_FILENAME), "w") as f:
                     json.dump(data, f, indent=2)
                     f.write("\n")
-                if os.path.dirname(target) == exp_dir:
-                    keys = tuple(sorted(data["props"].keys()))
-                    schemas[keys] = schemas.get(keys, 0) + 1
-
-        if len(schemas) > 1:
-            log(
-                f"  warning: '{ident}' mixes {len(schemas)} property schemas; "
-                "new artifacts are checked against the newest one:"
-            )
-            for keys, count in sorted(schemas.items(), key=lambda s: -s[1]):
-                log(f"    {count} artifact(s) with keys {list(keys)}")

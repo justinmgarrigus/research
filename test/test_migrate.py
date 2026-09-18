@@ -229,18 +229,3 @@ def test_migrate_same_directory(tmp_path: Path) -> None:
         migrate(str(tmp_path), str(tmp_path))
     with pytest.raises(FileNotFoundError):
         migrate(str(tmp_path / "missing"), str(tmp_path / "new"))
-
-
-def test_migrate_mixed_schemas(store: Path, tmp_path: Path) -> None:
-    """Experiments whose property keys changed over time are reported."""
-    old = tmp_path / "old"
-    build_old_store(old)
-    art2 = old / "exp-gen-bbbbbbbb" / "index.json"
-    data = json.loads(art2.read_text())
-    data["artifacts"][1]["properties"]["backend"] = "vllm"
-    art2.write_text(json.dumps(data))
-    lines: list[str] = []
-    migrate(str(old), str(store), log=lines.append)
-    warning = next(line for line in lines if "mixes 2 property schemas" in line)
-    assert "'gen'" in warning
-    assert any("['backend', 'log', 'tpot', 'x']" in line for line in lines)

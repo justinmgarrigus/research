@@ -1,9 +1,9 @@
 # Research
 
 Stores, versions, and queries research artifacts on the filesystem. An
-*experiment* is a named group of *artifacts* (one per trial) that share the
-same queryable properties; an artifact may carry files (logs, traces) that are
-copied next to its properties.
+*experiment* is a named group of *artifacts* (one per trial) that are queried
+together; an artifact may carry files (logs, traces) that are copied next to
+its properties.
 
 The store is a plain directory tree, and the tree is the only source of truth.
 There are no indexes to keep in sync, so viewing, editing, renaming, and
@@ -124,11 +124,11 @@ Notes:
   mean the whole repository.
 * A `pathlib.Path` property is copied into the artifact and afterwards points
   at the copy. A `str` that names an existing path is rejected as ambiguous.
-* Every artifact in an experiment must have the same property keys and value
-  types (`None` matches anything). A new artifact is checked against the most
-  recently written one, so a schema may evolve by migrating the existing
-  artifacts first, e.g. by editing their `artifact.json` or via
-  `art.props[...] = ...; art.save()`.
+* Artifacts in an experiment may have different property keys, so recording a
+  new setting (or dropping an old one) needs no migration; readers should use
+  `props.get(...)` for keys older artifacts lack. A property both have must
+  keep its value type (`None` matches anything), checked against the most
+  recently written artifact, which catches a key reused for something else.
 * Adding an artifact is atomic: it is written to a hidden temporary directory
   and renamed into place, so concurrent workers never see a partial artifact,
   and two workers storing the same identifier cannot both succeed.

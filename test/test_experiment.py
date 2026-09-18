@@ -125,28 +125,33 @@ def test_duplicate_and_replace(store: Path, project: Path) -> None:
 
 
 def test_schema(store: Path, project: Path) -> None:
-    """Every artifact in an experiment has the same keys and value types."""
+    """A property shared with the existing artifacts keeps its value type."""
     exp = make(project)
     exp.add_artifact(Artifact(exp, "a", {"x": 1, "cfg": {"n": 2}, "e": None}))
     good = [
         {"x": 2, "cfg": {"n": 3}, "e": "boom"},
         {"x": 2.5, "cfg": {"n": 3.0}, "e": None},
         {"x": None, "cfg": None, "e": None},
+        # Keys may be dropped or added, at any depth.
+        {"x": 1},
+        {"x": 1, "cfg": {"n": 2}, "e": None, "extra": 1},
+        {"x": 1, "cfg": {"m": 2}, "e": None},
     ]
     for idx, props in enumerate(good):
         exp.add_artifact(Artifact(exp, f"good{idx}", props))
     bad = [
-        {"x": 1},
-        {"x": 1, "cfg": {"n": 2}, "e": None, "extra": 1},
         {"x": "1", "cfg": {"n": 2}, "e": None},
         {"x": True, "cfg": {"n": 2}, "e": None},
-        {"x": 1, "cfg": {"m": 2}, "e": None},
         {"x": 1, "cfg": {"n": "2"}, "e": None},
+        {"x": 1, "cfg": 2},
     ]
     for idx, props in enumerate(bad):
         with pytest.raises(ValueError):
             exp.add_artifact(Artifact(exp, f"bad{idx}", props))
-    assert [a.ident for a in exp.artifacts] == ["a", "good0", "good1", "good2"]
+    assert [a.ident for a in exp.artifacts] == [
+        "a",
+        *(f"good{idx}" for idx in range(len(good))),
+    ]
 
 
 def test_delete_in_file_explorer(store: Path, project: Path) -> None:
@@ -369,10 +374,10 @@ def test_schema_fills_none_from_older(store: Path, project: Path) -> None:
 
 
 def test_schema_follows_newest(store: Path, project: Path) -> None:
-    """The schema reference is the most recently written artifact.
+    """Types are checked against the most recently written artifact.
 
     After a migration, an experiment may hold artifacts whose properties
-    grew over time; new artifacts must match the latest form, not the
+    changed over time; new artifacts must match the latest form, not the
     oldest.
     """
     exp = make(project)
@@ -390,7 +395,7 @@ def test_schema_follows_newest(store: Path, project: Path) -> None:
     )
     exp.add_artifact(Artifact(exp, "b", {"x": 2, "backend": "llamacpp"}))
     with pytest.raises(ValueError):
-        exp.add_artifact(Artifact(exp, "c", {"x": 2}))
+        exp.add_artifact(Artifact(exp, "c", {"x": 2, "backend": 1}))
 
 
 @pytest.mark.regression
