@@ -80,6 +80,24 @@ def test_path_string_ambiguous(
     Artifact(exp, "art", {"backend": "vllm"})
 
 
+@pytest.mark.regression
+def test_load_path_string_created_later(
+    store: Path, project: Path, tmp_path: Path
+) -> None:
+    """A stored str that later names an existing path still loads.
+
+    Regression test: loading re-ran the check that rejects a str naming an
+    existing path, so storing a command line holding a not-yet-downloaded
+    model's directory made the whole experiment unreadable once it existed.
+    """
+    exp = make(project)
+    later = tmp_path / "later" / "model"
+    exp.add_artifact(Artifact(exp, "art", {"cmd": ["serve", str(later)]}))
+    later.mkdir(parents=True)
+    assert exp.get("art").props == {"cmd": ["serve", str(later)]}
+    assert [art.ident for art in exp.artifacts] == ["art"]
+
+
 def test_unstorable(store: Path, project: Path) -> None:
     """Only JSON-like values and paths can be stored."""
     exp = make(project)

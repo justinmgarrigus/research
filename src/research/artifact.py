@@ -161,16 +161,21 @@ class Artifact:
         code: Code | None = None,
         accepted: dict[str, Any] | None = None,
         path: str | None = None,
+        check: bool = True,
     ) -> None:
         """Creates an artifact in memory; "Experiment.add_artifact" stores it.
 
         Raises ValueError if "ident" is not a legal directory name or "props"
         contains something that cannot be stored (see "check_props()").
+        "check=False" skips the latter, for properties read back from the
+        store: they were checked when stored, and a str in them may name a
+        path that only came to exist afterwards.
         """
         validate_ident(ident, kind="artifact identifier")
         if not isinstance(props, dict):
             raise ValueError(f"props must be a dict, not {type(props)}")
-        check_props(props)
+        if check:
+            check_props(props)
 
         self.experiment = experiment
         self.ident = ident
@@ -195,6 +200,7 @@ class Artifact:
             code=Code.from_json(code) if code is not None else None,
             accepted=data.get("accepted"),
             path=path,
+            check=False,
         )
 
     def _to_json(self: "Artifact", directory: str) -> dict[str, Any]:
