@@ -124,6 +124,96 @@ def test_duplicate_and_replace(store: Path, project: Path) -> None:
     assert len(exp.artifacts) == 1
 
 
+def test_replace_archives_instead_of_deleting(
+    store: Path, project: Path
+) -> None:
+    """Replacing an artifact keeps its predecessor on disk, set aside."""
+    exp = make(project)
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 1}, timestamp="2026-01-01T00:00:00")
+    )
+    old_path = exp.get("art").path
+    old_files = sorted(os.listdir(old_path))
+
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 2}, timestamp="2026-01-02T00:00:00"),
+        replace=True,
+    )
+
+    # The current artifact is still the one directory a file explorer would
+    # show for "art": nothing about browsing it changed.
+    assert exp.get("art").props == {"x": 2}
+    assert [a.ident for a in exp.artifacts] == ["art"]
+    assert sorted(os.listdir(exp.path)) == [
+        "art",
+        "experiment.json",
+        "superseded",
+    ]
+
+    # The old one is still fully intact, just moved aside.
+    archived_path = store / "exp" / "superseded" / "art@2026-01-01T000000"
+    assert archived_path.is_dir()
+    assert sorted(os.listdir(archived_path)) == old_files
+    archived = Artifact.load(exp, str(archived_path))
+    assert archived.props == {"x": 1}
+    # "old_path" now holds the replacement, not what used to live there.
+    assert exp.get("art").path == old_path
+
+
+def test_replace_archive_name_collision(store: Path, project: Path) -> None:
+    """Two replacements archived under the same timestamp don't collide."""
+    exp = make(project)
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 1}, timestamp="2026-01-01T00:00:00")
+    )
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 2}, timestamp="2026-01-01T00:00:00"),
+        replace=True,
+    )
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 3}, timestamp="2026-01-01T00:00:00"),
+        replace=True,
+    )
+    archived = sorted(a.ident for a in exp.superseded)
+    assert archived == ["art@2026-01-01T000000", "art@2026-01-01T000000-2"]
+    assert exp.get("art").props == {"x": 3}
+
+
+def test_superseded_and_history(store: Path, project: Path) -> None:
+    """Exposes replaced artifacts, via "superseded" and "history"."""
+    exp = make(project)
+    assert exp.superseded == []
+    assert exp.history("art") == []
+
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 1}, timestamp="2026-01-01T00:00:00")
+    )
+    exp.add_artifact(
+        Artifact(exp, "other", {"x": 9}, timestamp="2026-01-01T00:00:00")
+    )
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 2}, timestamp="2026-01-02T00:00:00"),
+        replace=True,
+    )
+    exp.add_artifact(
+        Artifact(exp, "art", {"x": 3}, timestamp="2026-01-03T00:00:00"),
+        replace=True,
+    )
+
+    # Superseded lists every archived artifact across the whole experiment,
+    # not just one identifier's.
+    assert [a.props["x"] for a in exp.superseded] == [1, 2]
+
+    # History follows one identifier's story, oldest to newest, including
+    # the still-current version.
+    history = exp.history("art")
+    assert [a.props["x"] for a in history] == [1, 2, 3]
+    assert history[-1].path == exp.get("art").path
+
+    # A never-replaced identifier's history is just itself.
+    assert [a.props["x"] for a in exp.history("other")] == [9]
+
+
 def test_schema(store: Path, project: Path) -> None:
     """A property shared with the existing artifacts keeps its value type."""
     exp = make(project)

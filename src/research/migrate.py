@@ -18,6 +18,7 @@ from research.artifact import FILENAME as ARTIFACT_FILENAME
 from research.artifact import PATH_KEY
 from research.code import Code
 from research.experiment import FILENAME as EXPERIMENT_FILENAME
+from research.store import SUPERSEDED_DIR
 
 """
 Timestamp format of the original layout.
@@ -28,13 +29,6 @@ OLD_TIMESTAMP_FORMAT = "%m/%d/%Y @ %H:%M:%S"
 Matches an original bucket directory name.
 """
 BUCKET_PATTERN = re.compile(r"exp-(?P<ident>.+)-(?P<commit>[0-9a-fA-F]{8})")
-
-"""
-Where an older duplicate of an artifact (same identifier, produced at an
-older commit) is placed inside the experiment directory. It is not a direct
-sub-directory of the experiment, so it is kept but not loaded.
-"""
-SUPERSEDED_DIR = "superseded"
 
 
 def convert_timestamp(value: str) -> str:

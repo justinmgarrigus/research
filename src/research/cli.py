@@ -26,6 +26,13 @@ def get_parser() -> argparse.ArgumentParser:
     ls = sub.add_parser("ls", help="List experiments, or one's artifacts")
     ls.add_argument("target", nargs="?", default=None)
 
+    hist = sub.add_parser(
+        "history",
+        help="List every version of one artifact, oldest first, including "
+        "ones superseded by a later 'replace'",
+    )
+    hist.add_argument("target", help="'<experiment>/<artifact>'")
+
     rm = sub.add_parser("rm", help="Delete an experiment or artifact")
     rm.add_argument("target")
     rm.add_argument(
@@ -101,6 +108,24 @@ def cmd_ls(target: str | None, root: str) -> str:
     return table(rows)
 
 
+def cmd_history(target: str, root: str) -> str:
+    """Lists every version of one artifact, oldest first."""
+    ident, sep, art_ident = target.partition("/")
+    if not sep or not art_ident:
+        raise ValueError(f"'{target}' must be '<experiment>/<artifact>'")
+    exp = Experiment.load(ident, root=root)
+    versions = exp.history(art_ident)
+    if not versions:
+        raise FileNotFoundError(f"No artifact '{target}'")
+    rows = [["ARTIFACT", "TIMESTAMP", "COMMIT", "STATE"]]
+    for art in versions:
+        commit = "" if art.code is None else art.code.short_commit
+        if art.code is not None and art.code.dirty:
+            commit += "*"
+        rows.append([art.ident, art.timestamp, commit, state(art)])
+    return table(rows)
+
+
 def cmd_rm(target: str, root: str, force: bool) -> str:
     """Deletes an experiment or a single artifact."""
     exp, art = load_target(target, root)
@@ -134,6 +159,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "ls":
             print(cmd_ls(args.target, root))
+        elif args.command == "history":
+            print(cmd_history(args.target, root))
         elif args.command == "rm":
             print(cmd_rm(args.target, root, args.force))
         elif args.command == "accept":

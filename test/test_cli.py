@@ -81,6 +81,29 @@ def test_ls_dirty(
     ]
 
 
+def test_history(
+    store: Path,
+    project: Path,
+    capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replacing an artifact keeps it visible through "history"."""
+    monkeypatch.chdir(project)
+    exp = fill(project)
+    exp.add_artifact(Artifact(exp, "a", {"x": 3}), replace=True)
+
+    lines = run(capsys, "history", "gen/a").splitlines()
+    assert lines[0].split() == ["ARTIFACT", "TIMESTAMP", "COMMIT", "STATE"]
+    assert len(lines) == 3  # header + the archived version + the current one
+    assert lines[1].split()[0].startswith("a@")
+    assert lines[2].split()[0] == "a"
+
+    # "ls" still only shows the current one: the file explorer view is
+    # unchanged by replacement.
+    assert run(capsys, "ls", "gen").splitlines()[1].split()[0] == "a"
+    assert os.path.isdir(store / "gen" / "superseded")
+
+
 def test_accept(
     store: Path,
     project: Path,
@@ -132,6 +155,8 @@ def test_errors(
         ["rm", "-f", "gen/nope"],
         ["accept", "gen/nope"],
         ["ls", "bad ident"],
+        ["history", "gen/nope"],
+        ["history", "gen"],
     ):
         assert main(argv) == 1
         assert capsys.readouterr().err.startswith("error:")

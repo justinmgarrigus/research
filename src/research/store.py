@@ -14,6 +14,15 @@ Longest identifier allowed, comfortably under the 255-byte file name limit.
 """
 MAX_IDENT_LENGTH = 200
 
+"""
+Name of the directory inside an experiment holding artifacts that
+"Experiment.add_artifact(replace=True)" superseded, or that "migrate()"
+found shadowed by a newer copy of the same identifier. Never loaded as one
+of the experiment's current artifacts, but never deleted either - a plain
+sub-directory, browsable like any other.
+"""
+SUPERSEDED_DIR = "superseded"
+
 
 def get_basedir() -> str:
     """Returns the absolute path of the research store, creating it if needed.

@@ -14,7 +14,7 @@ from util.atomic import AtomicWriteFile
 from research import artifact as artifact_module
 from research.artifact import Artifact, timestamp
 from research.code import DEFAULT_SOURCES, Code, find_root
-from research.store import get_basedir, validate_ident
+from research.store import SUPERSEDED_DIR, get_basedir, validate_ident
 
 """
 Name of the file inside an experiment directory holding its metadata. A
@@ -92,6 +92,13 @@ class Experiment:
     "experiment.json" and one sub-directory per artifact. The filesystem is
     the only source of truth: deleting, renaming, or moving those directories
     in a file explorer is fully supported.
+
+    "add_artifact(replace=True)" never deletes a valid artifact it displaces:
+    the old one moves into the "superseded/" sub-directory (see
+    "Experiment.superseded" and "Experiment.history"), still just a plain
+    directory of files, so it stays available to compare against whatever
+    replaced it. Only an explicit "Artifact.delete()" (or "research rm")
+    actually removes one.
 
     - ident (str): unique name; names the directory.
     - name (str): human-readable title.
@@ -293,9 +300,12 @@ class Experiment:
         into place, so concurrent processes never observe a half-written
         artifact and never store the same identifier twice (the loser gets
         FileExistsError). With "replace=True", an existing artifact with the
-        same identifier is deleted first. Raises ValueError if a property the
-        most recently added artifact also has changed type; properties may be
-        added or dropped freely.
+        same identifier is archived (see "_archive()") rather than deleted,
+        so a result collected under an identifier that already exists never
+        erases the one it displaces - it can still be compared against later
+        via "history()". Raises ValueError if a property the most recently
+        added artifact also has changed type; properties may be added or
+        dropped freely.
         """
         if artifact.experiment is None:
             artifact.experiment = self
@@ -325,7 +335,7 @@ class Experiment:
         try:
             artifact._write(tmp)
             if existing is not None:
-                existing.delete()
+                self._archive(existing)
             try:
                 os.rename(tmp, final)
             except OSError as e:
@@ -343,6 +353,71 @@ class Experiment:
         artifact.props = artifact_module.deserialize(
             artifact_module.serialize(artifact.props, tmp), final
         )
+
+    def _archive(self: Experiment, artifact: Artifact) -> None:
+        """Moves "artifact" into "superseded/" instead of deleting it.
+
+        Named "<ident>@<timestamp>" (timestamp, not commit: a commit alone
+        often cannot tell an old artifact from a new one collected at the
+        same commit, while every artifact's own collection time is unique
+        for practical purposes). A colliding name - two replacements of the
+        same identifier within the same second - gets a numeric suffix
+        instead of overwriting the earlier archive.
+        """
+        archive_dir = os.path.join(self.path, SUPERSEDED_DIR)
+        os.makedirs(archive_dir, exist_ok=True)
+        suffix = artifact.timestamp.replace(":", "")
+        target = os.path.join(archive_dir, f"{artifact.ident}@{suffix}")
+        attempt = 1
+        while os.path.exists(target):
+            attempt += 1
+            target = os.path.join(
+                archive_dir, f"{artifact.ident}@{suffix}-{attempt}"
+            )
+        os.rename(artifact.path, target)
+        artifact.path = target
+
+    @property
+    def superseded(self: Experiment) -> list[Artifact]:
+        """Returns archived artifacts, sorted by their archived name.
+
+        An artifact lands here when "add_artifact(replace=True)" gives its
+        identifier to a new artifact. They are real, valid artifacts - just
+        set aside rather than deleted - so they load normally; only
+        "Experiment.artifacts" (and schema/staleness checks, which are
+        judged against current artifacts) skip them. See "history()" to see
+        one identifier's current and archived versions together.
+        """
+        archive_dir = os.path.join(self.path, SUPERSEDED_DIR)
+        if not os.path.isdir(archive_dir):
+            return []
+        return [
+            Artifact.load(self, os.path.join(archive_dir, name))
+            for name in sorted(os.listdir(archive_dir))
+            if not name.startswith(".")
+            and os.path.isfile(
+                os.path.join(archive_dir, name, artifact_module.FILENAME)
+            )
+        ]
+
+    def history(self: Experiment, ident: str) -> list[Artifact]:
+        """Returns every version of artifact "ident", oldest first.
+
+        Includes the current artifact (if any) plus every version
+        "add_artifact(replace=True)" archived under that identifier, so a
+        newly-collected result can be checked against what the same
+        identifier produced before, not just the latest replacement.
+        """
+        validate_ident(ident, kind="artifact identifier")
+        prefix = f"{ident}@"
+        versions = [
+            art for art in self.superseded if art.ident.startswith(prefix)
+        ]
+        current = self.get(ident)
+        if current is not None:
+            versions.append(current)
+        versions.sort(key=lambda art: art.timestamp)
+        return versions
 
     def accept(self: Experiment) -> None:
         """Declares every artifact valid for the code as it is right now."""
