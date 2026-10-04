@@ -172,3 +172,29 @@ def test_path_and_migrate(
     out = run(capsys, "migrate", str(old), str(store))
     assert "gen: 2 bucket(s)" in out
     assert sorted(os.listdir(store)) == ["gen", "other"]
+
+
+@pytest.mark.regression
+def test_ls_reports_a_missing_source_as_stale(
+    store: Path,
+    project: Path,
+    capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Listing works even if an experiment declares a vanished source.
+
+    Regression test: a source that matched no files made "ls" exit with an
+    error instead of listing the artifacts as stale.
+    """
+    monkeypatch.chdir(project)
+    fill(project)
+    Experiment(
+        "gen", name="Gen", sources=["main.py", "moved.py"], root=str(project)
+    ).save()
+    rows = {
+        line.split()[0]: line.split()[1:3]
+        for line in run(capsys, "ls").splitlines()[1:]
+    }
+    assert rows == {"empty": ["0", "0"], "gen": ["2", "2"]}
+    out = run(capsys, "ls", "gen")
+    assert [line.split()[-1] for line in out.splitlines()[1:]] == ["stale"] * 2

@@ -13,6 +13,10 @@ Sources used when an experiment does not declare any: the whole repository.
 DEFAULT_SOURCES = ["."]
 
 
+class MissingSourceError(ValueError):
+    """A declared source matches no files."""
+
+
 def find_root(start: str) -> str:
     """Returns the root of the git repository containing "start"."""
     try:
@@ -29,9 +33,9 @@ def list_files(root: str, sources: list[str]) -> list[str]:
 
     Paths are relative to "root" and sorted. Untracked files are included, so
     a new module counts before it is "git add"ed, while ignored files (logs,
-    virtual environments) never count. Raises ValueError if a source matches
-    nothing, since that is a mistake in the declared sources rather than
-    something that can be answered.
+    virtual environments) never count. Raises MissingSourceError (a
+    ValueError) if a source matches nothing, since no fingerprint of it can
+    be computed.
     """
     repo = Repo(root)
     files: set[str] = set()
@@ -41,7 +45,9 @@ def list_files(root: str, sources: list[str]) -> list[str]:
         )
         matched = [f for f in out.split("\0") if f]
         if len(matched) == 0:
-            raise ValueError(f"Source '{source}' matches no files in '{root}'")
+            raise MissingSourceError(
+                f"Source '{source}' matches no files in '{root}'"
+            )
         files.update(matched)
     return sorted(files)
 

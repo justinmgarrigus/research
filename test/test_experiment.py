@@ -515,17 +515,19 @@ def test_schema_reference_ignores_mtime(store: Path, project: Path) -> None:
 
 
 @pytest.mark.regression
-def test_stale_bad_source_raises(store: Path, project: Path) -> None:
-    """A declared source that matches no files is an error, not "unknown".
+def test_stale_missing_source_is_stale(store: Path, project: Path) -> None:
+    """An artifact whose declared source no longer exists is stale.
 
-    Regression test: "is_stale" used to swallow the error, so a mis-typed
-    source silently made every artifact "unknown" (and a strict run
-    re-collected the whole experiment).
+    Regression test: "is_stale" raised ValueError, so one moved module made
+    "research ls" fail for the whole store. The fingerprint can't be
+    recomputed, but the code the artifact depended on did change.
     """
     exp = make(project, sources=["main.py"])
     exp.add_artifact(Artifact(exp, "a", {"x": 1}))
+    gone = make(project, sources=["main.py", "nothing.py"]).get("a")
+    assert gone.is_stale is True
     with pytest.raises(ValueError, match=r"nothing\.py"):
-        _ = make(project, sources=["nothing.py"]).get("a").is_stale
+        _ = gone.experiment.code
 
 
 @pytest.mark.regression

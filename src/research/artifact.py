@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from util.atomic import AtomicWriteFile
 
-from research.code import Code
+from research.code import Code, MissingSourceError
 from research.store import validate_ident
 
 if TYPE_CHECKING:
@@ -253,7 +253,9 @@ class Artifact:
         fingerprint recorded when the artifact was added (or last accepted).
         Returns None if that cannot be determined: the artifact has no
         fingerprint (it was migrated), it is not attached to an experiment,
-        or the current directory is not inside a git repository.
+        or the current directory is not inside a git repository. A source
+        that no longer exists (e.g. a module that was moved) counts as a
+        change: the artifact is stale, not an error.
         """
         reference = None
         if self.accepted is not None:
@@ -266,6 +268,8 @@ class Artifact:
             current = self.experiment.code
         except FileNotFoundError:
             return None
+        except MissingSourceError:
+            return True
         return current.fingerprint != reference
 
     def accept(self: "Artifact") -> None:
